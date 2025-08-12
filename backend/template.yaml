@@ -1,0 +1,196 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  seasonthon-checkin
+
+  시즌톤 체크인을 위한 서버리스 애플리케이션
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        EVENTS_TABLE: !Ref EventsTable
+        REGISTRATIONS_TABLE: !Ref RegistrationsTable
+        CHECKINS_TABLE: !Ref CheckinsTable
+        FRONTEND_URL: ${FRONTEND_URL}
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
+
+Resources:
+  # DynamoDB 테이블들
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-events"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: event_code
+          AttributeType: S
+      KeySchema:
+        - AttributeName: event_code
+          KeyType: HASH
+
+  RegistrationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-registrations"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: event_code
+          AttributeType: S
+        - AttributeName: phone
+          AttributeType: S
+      KeySchema:
+        - AttributeName: event_code
+          KeyType: HASH
+        - AttributeName: phone
+          KeyType: RANGE
+
+  CheckinsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-checkins"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: phone
+          AttributeType: S
+        - AttributeName: event_code
+          AttributeType: S
+      KeySchema:
+        - AttributeName: phone
+          KeyType: HASH
+        - AttributeName: event_code
+          KeyType: RANGE
+
+  # Lambda 함수들
+  CreateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: create_event.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+      Events:
+        CreateEvent:
+          Type: Api
+          Properties:
+            Path: /events
+            Method: post
+        CreateEventOptions:
+          Type: Api
+          Properties:
+            Path: /events
+            Method: options
+
+  RegisterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: register.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RegistrationsTable
+      Events:
+        Register:
+          Type: Api
+          Properties:
+            Path: /events/{event_code}/register
+            Method: post
+        RegisterOptions:
+          Type: Api
+          Properties:
+            Path: /events/{event_code}/register
+            Method: options
+
+  CheckinFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: checkin.lambda_handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RegistrationsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CheckinsTable
+      Events:
+        Checkin:
+          Type: Api
+          Properties:
+            Path: /checkin
+            Method: post
+        CheckinOptions:
+          Type: Api
+          Properties:
+            Path: /checkin
+            Method: options
+
+  GetEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: get_event.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RegistrationsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref CheckinsTable
+      Events:
+        GetEvent:
+          Type: Api
+          Properties:
+            Path: /events/{event_code}
+            Method: get
+        GetEventOptions:
+          Type: Api
+          Properties:
+            Path: /events/{event_code}
+            Method: options
+  
+  GetParticipantsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: get_participants.lambda_handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RegistrationsTable
+      Events:
+        GetEventParticipants:
+          Type: Api
+          Properties:
+            Path: /events/{event_code}/participants
+            Method: get
+        GetEventParticipantsOptions:
+          Type: Api
+          Properties:
+            Path: /events/{event_code}/participants
+            Method: options
+
+Outputs:
+  CheckinApi:
+    Description: "체크인 시스템 API Gateway endpoint URL"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  
+  EventsTable:
+    Description: "이벤트 테이블 이름"
+    Value: !Ref EventsTable
+    
+  RegistrationsTable:
+    Description: "등록 테이블 이름"  
+    Value: !Ref RegistrationsTable
+    
+  CheckinsTable:
+    Description: "체크인 테이블 이름"
+    Value: !Ref CheckinsTable
