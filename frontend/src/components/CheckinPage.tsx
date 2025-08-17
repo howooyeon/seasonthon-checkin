@@ -391,7 +391,7 @@ const CheckinPage: React.FC = () => {
             
             <div style={{ position: 'relative', zIndex: 1 }}>
               <div style={{ 
-                fontSize: '80px', 
+                fontSize: '50px', 
                 marginBottom: '24px',
                 animation: 'bounce 1s ease-in-out'
               }}>
